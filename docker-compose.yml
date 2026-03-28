@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8010:8010"
     env_file:
       - .env
     environment:
@@ -49,6 +49,22 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  model_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "scripts/model_server.py"]
+    ports:
+      - "8011:8011"
+    environment:
+      - API_URL=http://backend:8000/api/v1/check
+      - BATCH_SIZE=20
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    depends_on:
+      - backend
 
 networks:
   default:

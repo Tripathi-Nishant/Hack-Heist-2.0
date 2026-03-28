@@ -32,23 +32,21 @@ def calculate_psi(
     if len(reference) == 0 or len(current) == 0:
         return 0.0
 
+    actual_bins = min(bins, max(3, len(current) // 4))
+
     # Build bins from reference distribution
     breakpoints = np.linspace(
         min(reference.min(), current.min()),
         max(reference.max(), current.max()),
-        bins + 1
+        actual_bins + 1
     )
 
     ref_counts, _ = np.histogram(reference, bins=breakpoints)
     cur_counts, _ = np.histogram(current, bins=breakpoints)
 
-    # Convert to proportions, avoid division by zero
-    ref_pct = ref_counts / len(reference)
-    cur_pct = cur_counts / len(current)
-
-    # Replace zeros to avoid log(0)
-    ref_pct = np.where(ref_pct == 0, 1e-6, ref_pct)
-    cur_pct = np.where(cur_pct == 0, 1e-6, cur_pct)
+    # Laplace smoothing to eliminate the infinite penalty of empty bins on generic logs
+    ref_pct = (ref_counts + 0.5) / (len(reference) + actual_bins * 0.5)
+    cur_pct = (cur_counts + 0.5) / (len(current) + actual_bins * 0.5)
 
     psi = np.sum((cur_pct - ref_pct) * np.log(cur_pct / ref_pct))
     return float(round(psi, 6))
@@ -86,20 +84,20 @@ def calculate_kl_divergence(
     if len(reference) == 0 or len(current) == 0:
         return 0.0
 
+    actual_bins = min(bins, max(3, len(current) // 4))
+
     breakpoints = np.linspace(
         min(reference.min(), current.min()),
         max(reference.max(), current.max()),
-        bins + 1
+        actual_bins + 1
     )
 
     ref_counts, _ = np.histogram(reference, bins=breakpoints)
     cur_counts, _ = np.histogram(current, bins=breakpoints)
-
-    ref_pct = ref_counts / len(reference)
-    cur_pct = cur_counts / len(current)
-
-    ref_pct = np.where(ref_pct == 0, 1e-6, ref_pct)
-    cur_pct = np.where(cur_pct == 0, 1e-6, cur_pct)
+    
+    # Laplace smoothing to handle tiny batches with empty bins
+    ref_pct = (ref_counts + 0.5) / (len(reference) + actual_bins * 0.5)
+    cur_pct = (cur_counts + 0.5) / (len(current) + actual_bins * 0.5)
 
     kl = np.sum(cur_pct * np.log(cur_pct / ref_pct))
     return float(round(kl, 6))
@@ -128,20 +126,20 @@ def calculate_js_distance(
     if len(reference) == 0 or len(current) == 0:
         return 0.0
 
+    actual_bins = min(bins, max(3, len(current) // 4))
+
     breakpoints = np.linspace(
         min(reference.min(), current.min()),
         max(reference.max(), current.max()),
-        bins + 1
+        actual_bins + 1
     )
 
     ref_counts, _ = np.histogram(reference, bins=breakpoints)
     cur_counts, _ = np.histogram(current, bins=breakpoints)
 
-    ref_pct = (ref_counts / len(reference)).astype(float)
-    cur_pct = (cur_counts / len(current)).astype(float)
-
-    ref_pct = np.where(ref_pct == 0, 1e-6, ref_pct)
-    cur_pct = np.where(cur_pct == 0, 1e-6, cur_pct)
+    # Laplace
+    ref_pct = (ref_counts + 0.5) / (len(reference) + actual_bins * 0.5)
+    cur_pct = (cur_counts + 0.5) / (len(current) + actual_bins * 0.5)
 
     js = jensenshannon(ref_pct, cur_pct)
     return float(round(js, 6))

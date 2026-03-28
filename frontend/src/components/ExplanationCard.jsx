@@ -4,9 +4,9 @@ import React, { useState } from "react";
 
 function Section({ label, content }) {
   const LABELS = {
-    DIAGNOSIS: { color: "#c9a020", icon: "▸" },
-    IMPACT:    { color: "#f07030", icon: "▸" },
-    ACTION:    { color: "#30a050", icon: "▸" },
+    DIAGNOSIS: { color: "#f59e0b", icon: "◈" },
+    IMPACT:    { color: "#ef4444", icon: "◈" },
+    ACTION:    { color: "#10b981", icon: "◈" },
   };
   const style = LABELS[label] || { color: "#888", icon: "▸" };
 
@@ -26,11 +26,11 @@ function Section({ label, content }) {
         <span>{style.icon}</span> {label}
       </div>
       <div style={{
-        fontSize:   "13px",
-        color:      "#8a9a8c",
-        lineHeight: 1.7,
-        paddingLeft:"12px",
-        borderLeft: `2px solid ${style.color}33`,
+        fontSize:   "13.5px",
+        color:      "#cbd5e1",
+        lineHeight: 1.6,
+        paddingLeft:"14px",
+        borderLeft: `3px solid ${style.color}66`,
       }}>
         {content.split("\n").map((line, i) => (
           line.trim() ? <div key={i} style={{ marginBottom: "4px" }}>{line.trim()}</div> : null
@@ -67,9 +67,9 @@ export default function ExplanationCard({ explanation, loading }) {
   if (loading) {
     return (
       <div style={{
-        fontFamily: "'IBM Plex Mono', monospace",
+        fontFamily: "'JetBrains Mono', monospace",
         padding:    "24px",
-        color:      "#3a5a3c",
+        color:      "#10b981",
         fontSize:   "12px",
         display:    "flex",
         gap:        "10px",
@@ -84,9 +84,9 @@ export default function ExplanationCard({ explanation, loading }) {
   if (!explanation) {
     return (
       <div style={{
-        fontFamily: "'IBM Plex Mono', monospace",
+        fontFamily: "'JetBrains Mono', monospace",
         padding:    "24px",
-        color:      "#2a3a2c",
+        color:      "#94a3b8",
         fontSize:   "12px",
         textAlign:  "center",
       }}>
@@ -99,16 +99,17 @@ export default function ExplanationCard({ explanation, loading }) {
   const sections = parseExplanation(full_text || "");
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+    <div style={{ fontFamily: "'Outfit', sans-serif" }}>
 
       {/* Summary headline */}
       <div style={{
-        fontSize:     "14px",
-        color:        "#d4e8d4",
-        lineHeight:   1.5,
-        marginBottom: "20px",
+        fontSize:     "15px",
+        color:        "#f8fafc",
+        lineHeight:   1.6,
+        fontWeight:   500,
+        marginBottom: "24px",
         paddingBottom:"16px",
-        borderBottom: "1px solid #1a2a1c",
+        borderBottom: "1px solid #1e293b",
       }}>
         {summary}
       </div>
@@ -122,25 +123,27 @@ export default function ExplanationCard({ explanation, loading }) {
       <div style={{
         marginTop:     "16px",
         paddingTop:    "12px",
-        borderTop:     "1px solid #1a2a1c",
-        fontSize:      "10px",
-        color:         "#2a4a2c",
+        borderTop:     "1px solid #1e293b",
+        fontSize:      "11px",
+        color:         "#64748b",
         display:       "flex",
         alignItems:    "center",
         gap:           "8px",
       }}>
         <span style={{
-          background:   used_llm ? "#0a2a0e" : "#1a1a1a",
-          border:       `1px solid ${used_llm ? "#1a5a1e" : "#333"}`,
-          borderRadius: "2px",
-          padding:      "2px 8px",
-          color:        used_llm ? "#30a050" : "#555",
+          background:   used_llm ? "rgba(16, 185, 129, 0.1)" : "#1e293b",
+          border:       `1px solid ${used_llm ? "#10b981" : "#475569"}`,
+          borderRadius: "4px",
+          padding:      "3px 10px",
+          color:        used_llm ? "#10b981" : "#94a3b8",
+          fontWeight:   600,
+          fontFamily:   "'JetBrains Mono', monospace",
         }}>
-          {used_llm ? `claude / ${model}` : "rule-based"}
+          {used_llm ? `claude / ${model}` : "rule-based engine"}
         </span>
         {!used_llm && (
-          <span style={{ color: "#2a4a2c" }}>
-            set ANTHROPIC_API_KEY for LLM explanations
+          <span style={{ color: "#64748b", fontSize: "10px" }}>
+            set ANTHROPIC_API_KEY for AI analysis
           </span>
         )}
       </div>

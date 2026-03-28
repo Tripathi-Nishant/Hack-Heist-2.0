@@ -45,6 +45,10 @@ async def health():
     )
 
 
+# ── Alert Suppression Global ──────────────────────────────────────────────────
+consecutive_drift_count = 0
+ALERT_THRESHOLD = int(os.getenv("ALERT_THRESHOLD", 5))
+
 @router.post("/check", response_model=DriftReportResponse, tags=["Drift"])
 async def check_drift(req: CheckRequest, background_tasks: BackgroundTasks):
     try:
@@ -73,25 +77,57 @@ async def check_drift(req: CheckRequest, background_tasks: BackgroundTasks):
 
 
 async def _save_and_alert(result: dict):
-    report_id = save_report(result)
-    severity  = result.get("overall_severity")
-    if severity in ("critical", "warning"):
-        success = send_drift_alert(result, report_id=report_id)
-        if report_id:
-            mark_report_alerted(report_id)
-            log_alert(report_id, severity, "email", success, "")
+    global consecutive_drift_count
+    try:
+        report_id = save_report(result)
+        severity  = result.get("overall_severity")
+        
+        if severity == "critical":
+            consecutive_drift_count += 1
+            logger.info(f"🔥 CONSECUTIVE DRIFT: {consecutive_drift_count}/{ALERT_THRESHOLD}")
             
-    # Also save full report to S3 for long-term storage
-    if s3.enabled:
-        rid = result.get('id') or str(uuid.uuid4())
-        report_key = f"reports/{result.get('timestamp')[:10]}/{rid}.json"
-        s3.upload_json(report_key, result)
+            if consecutive_drift_count >= ALERT_THRESHOLD:
+                # Send alert only on the threshold cross (to avoid spamming after 5)
+                # Or send every time after 5? User said "mail... when drift detects more than 5-6 times"
+                # Let's send exactly at 5 and maybe every 10? 
+                # For a hackathon, let's send exactly at 5 to show the suppression works.
+                if consecutive_drift_count == ALERT_THRESHOLD:
+                    logger.info("🚀 Threshold reached! Sending AWS alert...")
+                    success = send_drift_alert(result, report_id=report_id)
+                    if report_id:
+                        mark_report_alerted(report_id)
+                        log_alert(report_id, severity, "email", success, f"Threshold {ALERT_THRESHOLD} reached")
+        else:
+            if consecutive_drift_count > 0:
+                logger.info("✅ System stable. Resetting drift counter.")
+            consecutive_drift_count = 0
+            
+        # Also save full report to S3 for long-term storage
+        if s3.enabled:
+            rid = result.get('id') or str(uuid.uuid4())
+            report_key = f"reports/{result.get('timestamp')[:10]}/{rid}.json"
+            s3.upload_json(report_key, result)
+    except Exception as e:
+        logger.error(f"Error in _save_and_alert: {e}")
+        import traceback
+        err = traceback.format_exc()
+        logger.error(err)
+        with open("error.txt", "w") as f:
+            f.write(err)
 
 
 @router.get("/history", tags=["History"])
 async def get_history(limit: int = 50):
     reports = get_report_history(limit=limit)
     return {"reports": reports, "count": len(reports), "db_enabled": DB_ENABLED}
+
+
+@router.get("/report/{report_id}", tags=["History"])
+async def get_report(report_id: int):
+    report = get_report_by_id(report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found.")
+    return report
 
 
 @router.get("/history/trend", tags=["History"])
@@ -216,3 +252,22 @@ async def test_alert():
     from driftwatch.alerts.email_alert import send_test_alert
     success = send_test_alert()
     return {"success": success, "message": "Check your email" if success else "Failed — check SNS_TOPIC_ARN"}
+
+
+@router.post("/retrain/{report_id}", tags=["Drift"])
+async def trigger_retrain(report_id: str):
+    """
+    Simulates a model retraining trigger.
+    In a real AWS app, this might trigger a GitHub Action or SageMaker Pipeline.
+    For this demo, we use a filesystem signal to tell the model server to reset.
+    """
+    logger.info(f"Retraining triggered for report {report_id}")
+    
+    # Create a signal file for the model server
+    try:
+        with open("RETRAIN_SIGNAL", "w") as f:
+            f.write(report_id)
+        return {"status": "success", "message": f"Retraining pipeline triggered for report {report_id}. Model will be updated shortly."}
+    except Exception as e:
+        logger.error(f"Failed to create retrain signal: {e}")
+        raise HTTPException(status_code=500, detail="Failed to trigger retraining pipeline.")

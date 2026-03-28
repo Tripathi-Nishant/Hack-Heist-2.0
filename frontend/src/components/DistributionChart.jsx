@@ -34,13 +34,14 @@ const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
     <div style={{
-      background: "#0d1117",
-      border:     "1px solid #1e2d20",
-      borderRadius: "3px",
-      padding:    "8px 12px",
-      fontFamily: "'IBM Plex Mono', monospace",
+      background: "#0f172a",
+      border:     "1px solid #1e293b",
+      borderRadius: "6px",
+      padding:    "10px 14px",
+      fontFamily: "'Outfit', sans-serif",
       fontSize:   "11px",
-      color:      "#8ab890",
+      color:      "#f8fafc",
+      boxShadow:  "0 4px 12px rgba(0,0,0,0.3)",
     }}>
       <div style={{ color: "#ccc", marginBottom: 4 }}>x = {label}</div>
       {payload.map(p => (
@@ -58,8 +59,8 @@ export default function DistributionChart({ featureName, featureData }) {
       <div style={{
         padding: "32px",
         textAlign: "center",
-        color: "#444",
-        fontFamily: "'IBM Plex Mono', monospace",
+        color: "#64748b",
+        fontFamily: "'Outfit', sans-serif",
         fontSize: "12px",
       }}>
         Distribution chart available for numerical features only.
@@ -73,12 +74,13 @@ export default function DistributionChart({ featureName, featureData }) {
   return (
     <div>
       <div style={{
-        fontFamily:    "'IBM Plex Mono', monospace",
+        fontFamily:    "'Outfit', sans-serif",
         fontSize:      "11px",
-        color:         "#5a7a5c",
+        color:         "#94a3b8",
         marginBottom:  "16px",
         textTransform: "uppercase",
-        letterSpacing: "0.08em",
+        letterSpacing: "0.1em",
+        fontWeight:    600,
       }}>
         {featureName} — distribution overlay
       </div>
@@ -87,14 +89,14 @@ export default function DistributionChart({ featureName, featureData }) {
         display: "flex",
         gap: "24px",
         marginBottom: "12px",
-        fontFamily: "'IBM Plex Mono', monospace",
+        fontFamily: "'JetBrains Mono', monospace",
         fontSize: "11px",
       }}>
-        <div style={{ color: "#30a050" }}>
-          train  μ={ref_mean?.toFixed(2)} σ={ref_std?.toFixed(2)}
+        <div style={{ color: "#10b981", fontWeight: 600 }}>
+          TRAIN μ={ref_mean?.toFixed(2)} σ={ref_std?.toFixed(2)}
         </div>
-        <div style={{ color: "#f07030" }}>
-          serve  μ={cur_mean?.toFixed(2)} σ={cur_std?.toFixed(2)}
+        <div style={{ color: "#ef4444", fontWeight: 600 }}>
+          SERVE μ={cur_mean?.toFixed(2)} σ={cur_std?.toFixed(2)}
         </div>
         {ref_mean && cur_mean && (
           <div style={{ color: "#888" }}>
@@ -107,23 +109,23 @@ export default function DistributionChart({ featureName, featureData }) {
         <AreaChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="trainGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="#30a050" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#30a050" stopOpacity={0.02} />
+              <stop offset="5%"  stopColor="#10b981" stopOpacity={0.4} />
+              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="serveGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor="#f07030" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#f07030" stopOpacity={0.02} />
+              <stop offset="5%"  stopColor="#ef4444" stopOpacity={0.4} />
+              <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1a2a1c" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
           <XAxis
             dataKey="x"
-            tick={{ fill: "#3a5a3c", fontSize: 10, fontFamily: "IBM Plex Mono" }}
-            axisLine={{ stroke: "#1a3a1e" }}
+            tick={{ fill: "#64748b", fontSize: 10, fontFamily: "JetBrains Mono" }}
+            axisLine={{ stroke: "#334155" }}
             tickLine={false}
           />
           <YAxis
-            tick={{ fill: "#3a5a3c", fontSize: 10, fontFamily: "IBM Plex Mono" }}
+            tick={{ fill: "#64748b", fontSize: 10, fontFamily: "JetBrains Mono" }}
             axisLine={false}
             tickLine={false}
           />
@@ -131,16 +133,16 @@ export default function DistributionChart({ featureName, featureData }) {
           <Area
             type="monotone"
             dataKey="training"
-            stroke="#30a050"
-            strokeWidth={1.5}
+            stroke="#10b981"
+            strokeWidth={2}
             fill="url(#trainGrad)"
             dot={false}
           />
           <Area
             type="monotone"
             dataKey="serving"
-            stroke="#f07030"
-            strokeWidth={1.5}
+            stroke="#ef4444"
+            strokeWidth={2}
             fill="url(#serveGrad)"
             dot={false}
           />

@@ -1,0 +1,24 @@
+{
+  "means": {
+    "age": 34.152,
+    "income": 54903.50881693804,
+    "credit_score": 675.1545,
+    "transaction_amount": 141.13756552553596,
+    "num_transactions": 8.1045,
+    "is_fraud": 0.03
+  },
+  "stds": {
+    "age": 9.446984638464258,
+    "income": 15079.8733745815,
+    "credit_score": 78.70292691572882,
+    "transaction_amount": 137.47526666316622,
+    "num_transactions": 2.8944375333244214,
+    "is_fraud": 0.17062988389681136
+  },
+  "regions": {
+    "south": 0.3085,
+    "north": 0.3055,
+    "east": 0.1995,
+    "west": 0.1865
+  }
+}

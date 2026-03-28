@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── App ───────────────────────────────────────────────────────────────────────
-PORT        = int(os.getenv("PORT", "8000"))
+PORT        = int(os.getenv("PORT", "8010"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # development | production
 IS_PROD     = ENVIRONMENT == "production"
 

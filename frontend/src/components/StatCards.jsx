@@ -3,9 +3,9 @@
 import React from "react";
 
 const SEV_STYLES = {
-  critical: { color: "#f07030", bg: "#3d1a0a", border: "#c0440a66", glow: "#f0703020" },
-  warning:  { color: "#c9a020", bg: "#2a2206", border: "#8a6a0066", glow: "#c9a02020" },
-  stable:   { color: "#30a050", bg: "#0a1a0e", border: "#1a5c2866", glow: "#30a05020" },
+  critical: { color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)", border: "rgba(239, 68, 68, 0.3)", glow: "rgba(239, 68, 68, 0.2)" },
+  warning:  { color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.3)", glow: "rgba(245, 158, 11, 0.2)" },
+  stable:   { color: "#10b981", bg: "rgba(16, 185, 129, 0.1)", border: "rgba(16, 185, 129, 0.3)", glow: "rgba(16, 185, 129, 0.2)" },
 };
 
 function Card({ label, value, sub, severity }) {
@@ -26,14 +26,15 @@ function Card({ label, value, sub, severity }) {
         textTransform: "uppercase",
         letterSpacing: "0.12em",
         marginBottom:  "8px",
-        fontFamily:    "'IBM Plex Mono', monospace",
+        fontFamily:    "'Outfit', sans-serif",
+        fontWeight:    600,
       }}>
         {label}
       </div>
       <div style={{
         fontSize:   "28px",
         color:      s.color,
-        fontFamily: "'IBM Plex Mono', monospace",
+        fontFamily: "'JetBrains Mono', monospace",
         fontWeight: 600,
         lineHeight: 1,
         marginBottom: "4px",
@@ -43,8 +44,9 @@ function Card({ label, value, sub, severity }) {
       {sub && (
         <div style={{
           fontSize:   "11px",
-          color:      s.color + "66",
-          fontFamily: "'IBM Plex Mono', monospace",
+          color:      "#cbd5e1",
+          fontFamily: "'Outfit', sans-serif",
+          fontWeight: 500,
         }}>
           {sub}
         </div>
@@ -60,8 +62,8 @@ export default function StatCards({ report }) {
         {["Overall Status", "Features Checked", "Drifted", "Schema Issues"].map(label => (
           <div key={label} style={{
             flex: 1, minWidth: "140px",
-            background: "#0d1117",
-            border: "1px solid #1a2a1c",
+            background: "#0f172a",
+            border: "1px solid #1e293b",
             borderRadius: "4px",
             padding: "16px 20px",
             height: "80px",

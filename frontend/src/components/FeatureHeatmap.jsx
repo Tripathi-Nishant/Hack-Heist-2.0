@@ -4,10 +4,10 @@
 import React, { useState } from "react";
 
 const SEV_COLOR = {
-  critical:     { bg: "#3d1a0a", border: "#c0440a", text: "#f07030", dot: "#f07030" },
-  warning:      { bg: "#2a2206", border: "#8a6a00", text: "#c9a020", dot: "#c9a020" },
-  stable:       { bg: "#0a1a0e", border: "#1a5c28", text: "#30a050", dot: "#30a050" },
-  type_mismatch:{ bg: "#1a0a2a", border: "#6030a0", text: "#a060e0", dot: "#a060e0" },
+  critical:     { bg: "rgba(239, 68, 68, 0.1)", border: "#ef4444", text: "#ef4444", dot: "#ef4444" },
+  warning:      { bg: "rgba(245, 158, 11, 0.1)", border: "#f59e0b", text: "#f59e0b", dot: "#f59e0b" },
+  stable:       { bg: "rgba(16, 185, 129, 0.1)", border: "#10b981", text: "#10b981", dot: "#10b981" },
+  type_mismatch:{ bg: "rgba(139, 92, 246, 0.1)", border: "#8b5cf6", text: "#a78bfa", dot: "#8b5cf6" },
 };
 
 function metric(data) {
@@ -31,7 +31,7 @@ export default function FeatureHeatmap({ features = {}, onFeatureClick }) {
   if (!entries.length) return null;
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+    <div style={{ fontFamily: "'Outfit', sans-serif" }}>
       <div style={{
         display: "grid",
         gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
@@ -50,12 +50,12 @@ export default function FeatureHeatmap({ features = {}, onFeatureClick }) {
               onMouseEnter={() => setHovered(name)}
               onMouseLeave={() => setHovered(null)}
               style={{
-                background:   isHov ? colors.border + "22" : colors.bg,
-                border:       `1px solid ${isHov ? colors.border : colors.border + "66"}`,
-                borderRadius: "4px",
+                background:   isHov ? colors.border + "1A" : colors.bg,
+                border:       `1px solid ${isHov ? colors.border : colors.border + "40"}`,
+                borderRadius: "6px",
                 padding:      "12px 14px",
                 cursor:       "pointer",
-                transition:   "all 0.15s ease",
+                transition:   "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
                 position:     "relative",
                 overflow:     "hidden",
               }}
@@ -67,7 +67,7 @@ export default function FeatureHeatmap({ features = {}, onFeatureClick }) {
                 width: 7, height: 7,
                 borderRadius: "50%",
                 background:   colors.dot,
-                boxShadow:    `0 0 6px ${colors.dot}`,
+                boxShadow:    `0 0 10px ${colors.dot}`,
               }} />
 
               {/* feature name */}
@@ -99,9 +99,10 @@ export default function FeatureHeatmap({ features = {}, onFeatureClick }) {
 
               {/* metric */}
               <div style={{
-                fontSize: "13px",
+                fontSize: "14px",
                 color:    colors.text,
-                fontWeight: 500,
+                fontWeight: 600,
+                fontFamily: "'JetBrains Mono', monospace",
               }}>
                 {metric(data)}
               </div>
@@ -110,7 +111,7 @@ export default function FeatureHeatmap({ features = {}, onFeatureClick }) {
               {delta != null && (
                 <div style={{
                   fontSize:  "11px",
-                  color:     Math.abs(delta) > 20 ? colors.text : colors.text + "99",
+                  color:     Math.abs(delta) > 20 ? colors.text : "#94a3b8",
                   marginTop: "4px",
                 }}>
                   mean {delta > 0 ? "+" : ""}{delta.toFixed(1)}%

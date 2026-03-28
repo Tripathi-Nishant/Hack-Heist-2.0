@@ -11,9 +11,9 @@ const ISSUE_ICONS = {
 };
 
 const SEV = {
-  critical: { color: "#f07030", bg: "#3d1a0a", border: "#c0440a44" },
-  warning:  { color: "#c9a020", bg: "#2a2206", border: "#8a6a0044" },
-  stable:   { color: "#30a050", bg: "#0a1a0e", border: "#1a5c2844" },
+  critical: { color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)", border: "rgba(239, 68, 68, 0.3)" },
+  warning:  { color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.3)" },
+  stable:   { color: "#10b981", bg: "rgba(16, 185, 129, 0.1)", border: "rgba(16, 185, 129, 0.3)" },
 };
 
 export default function SchemaPanel({ schema }) {
@@ -22,7 +22,7 @@ export default function SchemaPanel({ schema }) {
   const { has_drift, critical_count, warning_count, issues = [] } = schema;
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+    <div style={{ fontFamily: "'Outfit', sans-serif" }}>
 
       {/* Summary bar */}
       <div style={{
@@ -31,14 +31,14 @@ export default function SchemaPanel({ schema }) {
         marginBottom:  "16px",
         fontSize:      "12px",
       }}>
-        <span style={{ color: has_drift ? "#f07030" : "#30a050" }}>
+        <span style={{ color: has_drift ? "#ef4444" : "#10b981" }}>
           {has_drift ? "schema issues detected" : "schema ok"}
         </span>
         {critical_count > 0 && (
-          <span style={{ color: "#f07030" }}>{critical_count} critical</span>
+          <span style={{ color: "#ef4444" }}>{critical_count} critical</span>
         )}
         {warning_count > 0 && (
-          <span style={{ color: "#c9a020" }}>{warning_count} warning</span>
+          <span style={{ color: "#f59e0b" }}>{warning_count} warning</span>
         )}
       </div>
 
@@ -47,9 +47,9 @@ export default function SchemaPanel({ schema }) {
         <div style={{
           padding:      "20px",
           textAlign:    "center",
-          color:        "#2a5a2e",
+          color:        "#94a3b8",
           fontSize:     "12px",
-          border:       "1px solid #1a3a1e",
+          border:       "1px solid #1e293b",
           borderRadius: "4px",
         }}>
           No schema issues detected
@@ -92,7 +92,7 @@ export default function SchemaPanel({ schema }) {
                   </div>
                   <div style={{
                     fontSize:   "12px",
-                    color:      "#8a9a8c",
+                    color:      "#cbd5e1",
                     lineHeight: 1.5,
                   }}>
                     {issue.detail}

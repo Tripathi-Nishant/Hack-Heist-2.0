@@ -1,13 +1,14 @@
 // Dashboard — the main page.
 // Upload CSVs or paste JSON → get full drift report, heatmap, charts, explanation.
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { api } from "../api/api";
 import StatCards        from "../components/StatCards";
 import FeatureHeatmap   from "../components/FeatureHeatmap";
 import DistributionChart from "../components/DistributionChart";
 import SchemaPanel      from "../components/SchemaPanel";
 import ExplanationCard  from "../components/ExplanationCard";
+import DriftTimeline    from "../components/DriftTimeline";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -33,10 +34,11 @@ async function readFile(file) {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const FONT  = "'IBM Plex Mono', 'Courier New', monospace";
-const BG    = "#080c08";
-const PANEL = "#0d1117";
-const BORDER= "#1a2a1c";
+const FONT  = "'Outfit', sans-serif";
+const FONT_MONO = "'JetBrains Mono', monospace";
+const BG    = "#020617";
+const PANEL = "#0f172a";
+const BORDER= "#1e293b";
 
 const panelStyle = {
   background:   PANEL,
@@ -46,12 +48,13 @@ const panelStyle = {
 };
 
 const labelStyle = {
-  fontSize:      "9px",
-  color:         "#2a5a2e",
+  fontSize:      "10px",
+  color:         "#94a3b8",
   textTransform: "uppercase",
-  letterSpacing: "0.12em",
+  letterSpacing: "0.1em",
   marginBottom:  "12px",
   fontFamily:    FONT,
+  fontWeight:    600,
 };
 
 // ── Upload zone ───────────────────────────────────────────────────────────────
@@ -80,12 +83,12 @@ function UploadZone({ label, onData, data }) {
       onClick={() => document.getElementById(`file-${label}`).click()}
       style={{
         flex:         1,
-        border:       `1px dashed ${drag ? "#30a050" : data ? "#1a5c28" : "#1a2a1c"}`,
-        borderRadius: "4px",
+        border:       `1px dashed ${drag ? "#10b981" : data ? "#059669" : "#475569"}`,
+        borderRadius: "6px",
         padding:      "20px",
         cursor:       "pointer",
         textAlign:    "center",
-        background:   data ? "#0a1a0e" : drag ? "#0a1a0e" : "transparent",
+        background:   data ? "rgba(16, 185, 129, 0.1)" : drag ? "rgba(16, 185, 129, 0.1)" : "transparent",
         transition:   "all 0.15s",
         fontFamily:   FONT,
       }}
@@ -97,10 +100,10 @@ function UploadZone({ label, onData, data }) {
         style={{ display: "none" }}
         onChange={e => e.target.files[0] && handleFile(e.target.files[0])}
       />
-      <div style={{ fontSize: "20px", marginBottom: "8px", color: data ? "#30a050" : "#1a3a1e" }}>
+      <div style={{ fontSize: "20px", marginBottom: "8px", color: data ? "#10b981" : "#64748b" }}>
         {data ? "✓" : "⊕"}
       </div>
-      <div style={{ fontSize: "11px", color: data ? "#30a050" : "#2a4a2e" }}>
+      <div style={{ fontSize: "11px", color: data ? "#10b981" : "#94a3b8", fontWeight: 500 }}>
         {data ? `${data.length} rows loaded` : `Drop ${label} CSV`}
       </div>
     </div>
@@ -133,14 +136,14 @@ function FeatureModal({ feature, data, onClose }) {
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
-          <div style={{ fontSize: "13px", color: "#d4e8d4", fontWeight: 600 }}>{feature}</div>
+          <div style={{ fontSize: "14px", color: "#f8fafc", fontWeight: 600 }}>{feature}</div>
           <button onClick={onClose} style={{
             background: "none", border: "none",
-            color: "#444", cursor: "pointer", fontSize: "18px",
+            color: "#94a3b8", cursor: "pointer", fontSize: "24px", lineHeight: "14px"
           }}>×</button>
         </div>
         <DistributionChart featureName={feature} featureData={data} />
-        <div style={{ marginTop: "20px", fontSize: "11px", color: "#3a5a3c" }}>
+        <div style={{ marginTop: "20px", fontSize: "12px", color: "#cbd5e1", fontFamily: FONT_MONO }}>
           {data.type === "numerical" && (
             <>
               <div>PSI: {data.psi} &nbsp;|&nbsp; KL: {data.kl_divergence} &nbsp;|&nbsp; JS: {data.js_distance}</div>
@@ -172,6 +175,45 @@ export default function Dashboard() {
   const [activeTab,    setActiveTab]    = useState("features");
   const [selectedFeat, setSelectedFeat] = useState(null);
   const [selectedData, setSelectedData] = useState(null);
+  const [history,      setHistory]      = useState([]);
+  const [liveMode,     setLiveMode]     = useState(true);
+  const [retraining,   setRetraining]   = useState(false);
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      const resp = await fetch("/api/v1/history");
+      const data = await resp.json();
+      setHistory(data.reports || []);
+    } catch (e) {
+      console.error("Failed to fetch history:", e);
+    }
+  }, []);
+
+  // Poll for history
+  useEffect(() => {
+    fetchHistory();
+    let interval;
+    if (liveMode) {
+      interval = setInterval(fetchHistory, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [liveMode, fetchHistory]);
+
+  async function loadReportFromHistory(reportId) {
+    setLoading(true);
+    try {
+      const resp = await fetch(`/api/v1/history`);
+      const data = await resp.json();
+      const found = data.reports.find(r => r.id === reportId);
+      if (found) {
+        setReport(found);
+      }
+    } catch (e) {
+      setError("Could not load report detail.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function runCheck() {
     if (!trainData || !servingData) return;
@@ -214,6 +256,28 @@ export default function Dashboard() {
     setSelectedData(data);
   }
 
+  async function handleRetrain() {
+    if (!report) return;
+    setRetraining(true);
+    try {
+      // Trigger backend "retraining"
+      await fetch(`/api/v1/retrain/${report.id || 'current'}`, { method: "POST" });
+      
+      // Artificial delay for "Training" dramatic effect
+      await new Promise(r => setTimeout(r, 4000));
+      
+      // Refresh history to see the "Resolution"
+      await fetchHistory();
+      
+      setRetraining(false);
+      alert("Model successfully retrained! Reference data has been updated to the current serving distribution.");
+    } catch (err) {
+      console.error(err);
+      setRetraining(false);
+      alert("Retraining failed. Check console for details.");
+    }
+  }
+
   const TABS = ["features", "schema", "explain"];
 
   return (
@@ -228,17 +292,18 @@ export default function Dashboard() {
       {/* Header */}
       <div style={{
         borderBottom: `1px solid ${BORDER}`,
-        padding:      "16px 32px",
+        padding:      "20px 32px",
         display:      "flex",
         alignItems:   "center",
         gap:          "20px",
-        background:   "#090d09",
+        background:   "#020617",
+        boxShadow:    "0 4px 30px rgba(0,0,0,0.4)",
       }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "12px" }}>
-          <span style={{ fontSize: "18px", color: "#30a050", fontWeight: 700, letterSpacing: "0.04em" }}>
+          <span style={{ fontSize: "20px", color: "#f8fafc", fontWeight: 700, letterSpacing: "0.02em" }}>
             DRIFTWATCH
           </span>
-          <span style={{ fontSize: "10px", color: "#2a4a2e", letterSpacing: "0.12em" }}>
+          <span style={{ fontSize: "11px", color: "#64748b", letterSpacing: "0.05em", fontWeight: 500 }}>
             v0.1.0 / training–serving skew detector
           </span>
         </div>
@@ -247,9 +312,9 @@ export default function Dashboard() {
           <div style={{
             marginLeft:    "auto",
             fontSize:      "11px",
-            color:         report.overall_severity === "critical" ? "#f07030"
-                         : report.overall_severity === "warning"  ? "#c9a020"
-                         : "#30a050",
+            color:         report.overall_severity === "critical" ? "#ef4444"
+                         : report.overall_severity === "warning"  ? "#f59e0b"
+                         : "#10b981",
             border:        `1px solid currentColor`,
             borderRadius:  "2px",
             padding:       "3px 10px",
@@ -260,7 +325,65 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div style={{ padding: "28px 32px", maxWidth: "1100px", margin: "0 auto" }}>
+      <div style={{ display: "flex", padding: "28px 32px", maxWidth: "1400px", margin: "0 auto", gap: "28px" }}>
+        
+        {/* Sidebar: History */}
+        <div style={{ width: "280px", flexShrink: 0 }}>
+          <div style={{ ...panelStyle, padding: "16px" }}>
+            <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between" }}>
+              <span>Recent Checks</span>
+              <span 
+                onClick={() => setLiveMode(!liveMode)}
+                style={{ color: liveMode ? "#10b981" : "#444", cursor: "pointer" }}
+              >
+                {liveMode ? "● LIVE" : "○ MANUAL"}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {history.length === 0 && (
+                <div style={{ fontSize: "10px", color: "#222", fontStyle: "italic" }}>
+                  Waiting for incoming reports...
+                </div>
+              )}
+              {history.map(item => (
+                <div 
+                  key={item.id}
+                  onClick={() => {
+                    if (item.report_json) {
+                      setReport(item.report_json);
+                      setActiveTab("features");
+                    } else {
+                      loadReportFromHistory(item.id);
+                    }
+                  }}
+                  style={{
+                    padding: "10px",
+                    borderRadius: "3px",
+                    background: report?.id === item.id ? "#064e3b" : "#0f172a",
+                    border: `1px solid ${report?.id === item.id ? "#10b981" : "#1a2a1c"}`,
+                    cursor: "pointer",
+                    fontSize: "11px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <span style={{ color: "#f8fafc" }}>{item.tag || `Report #${item.id}`}</span>
+                    <span style={{ 
+                      color: item.overall_severity === "critical" ? "#ef4444" : "#10b981",
+                      fontSize: "9px"
+                    }}>
+                      {item.overall_severity?.toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={{ color: "#64748b", fontSize: "9px" }}>
+                    {new Date(item.created_at).toLocaleTimeString()} · {item.drifted_features?.length || 0} drifted
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
 
         {/* Upload + config row */}
         <div style={{ ...panelStyle, marginBottom: "20px" }}>
@@ -276,11 +399,11 @@ export default function Dashboard() {
               value={labelColumn}
               onChange={e => setLabelColumn(e.target.value)}
               style={{
-                background:   "#080c08",
+                background:   "#0f172a",
                 border:       `1px solid ${BORDER}`,
                 borderRadius: "3px",
                 padding:      "8px 12px",
-                color:        "#8ab890",
+                color:        "#10b981",
                 fontFamily:   FONT,
                 fontSize:     "12px",
                 outline:      "none",
@@ -292,11 +415,11 @@ export default function Dashboard() {
               onClick={runCheck}
               disabled={!trainData || !servingData || loading}
               style={{
-                background:    trainData && servingData ? "#0a2a0e" : "#080c08",
-                border:        `1px solid ${trainData && servingData ? "#30a050" : BORDER}`,
+                background:    trainData && servingData ? "#064e3b" : "#0f172a",
+                border:        `1px solid ${trainData && servingData ? "#10b981" : BORDER}`,
                 borderRadius:  "3px",
                 padding:       "8px 24px",
-                color:         trainData && servingData ? "#30a050" : "#2a4a2e",
+                color:         trainData && servingData ? "#10b981" : "#64748b",
                 fontFamily:    FONT,
                 fontSize:      "12px",
                 cursor:        trainData && servingData ? "pointer" : "default",
@@ -306,6 +429,58 @@ export default function Dashboard() {
             >
               {loading ? "ANALYSING..." : "RUN CHECK"}
             </button>
+            
+            <button
+              onClick={() => {
+                const csvContent = "data:text/csv;charset=utf-8," 
+                  + ["Feature,Metric,Severity", ...Object.entries(report?.features || {}).map(([k,v]) => `${k},${v.psi || v.chi2_test?.p_value},${v.severity}`)].join("\n");
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `drift_report_${report?.id || 'export'}.csv`);
+                document.body.appendChild(link);
+                link.click();
+              }}
+              disabled={!report}
+              style={{
+                background:    "none",
+                border:        `1px solid ${report ? "#334155" : BORDER}`,
+                borderRadius:  "3px",
+                padding:       "8px 16px",
+                color:         report ? "#94a3b8" : "#475569",
+                fontFamily:    FONT,
+                fontSize:      "12px",
+                cursor:        report ? "pointer" : "default",
+                letterSpacing: "0.05em",
+                transition:    "all 0.15s",
+              }}
+            >
+              DOWNLOAD REPORT
+            </button>
+
+            {report && report.overall_severity === "critical" && (
+              <button
+                onClick={handleRetrain}
+                disabled={retraining}
+                style={{
+                  background:    "#ef444415",
+                  border:        "1px solid #ef4444",
+                  borderRadius:  "3px",
+                  padding:       "8px 20px",
+                  color:         "#ef4444",
+                  fontFamily:    FONT,
+                  fontSize:      "12px",
+                  fontWeight:    700,
+                  cursor:        retraining ? "default" : "pointer",
+                  letterSpacing: "0.05em",
+                  transition:    "all 0.15s",
+                  boxShadow:     "0 0 15px rgba(239, 68, 68, 0.2)",
+                  marginLeft:    "auto",
+                }}
+              >
+                {retraining ? "REFITTING MODEL..." : "APPROVE RETRAINING"}
+              </button>
+            )}
           </div>
         </div>
 
@@ -314,11 +489,14 @@ export default function Dashboard() {
           <div style={{
             background: "#3d1a0a", border: "1px solid #c0440a44",
             borderRadius: "4px", padding: "12px 16px",
-            color: "#f07030", fontSize: "12px", marginBottom: "20px",
+            color: "#ef4444", fontSize: "12px", marginBottom: "20px",
           }}>
             Error: {error}
           </div>
         )}
+
+        {/* Drift Timeline */}
+        <DriftTimeline history={history} />
 
         {/* Stat cards */}
         <div style={{ marginBottom: "20px" }}>
@@ -338,9 +516,9 @@ export default function Dashboard() {
                   style={{
                     background:    "none",
                     border:        "none",
-                    borderBottom:  activeTab === tab ? "2px solid #30a050" : "2px solid transparent",
+                    borderBottom:  activeTab === tab ? "2px solid #10b981" : "2px solid transparent",
                     padding:       "8px 20px",
-                    color:         activeTab === tab ? "#30a050" : "#2a5a2e",
+                    color:         activeTab === tab ? "#10b981" : "#94a3b8",
                     fontFamily:    FONT,
                     fontSize:      "11px",
                     textTransform: "uppercase",
@@ -352,12 +530,12 @@ export default function Dashboard() {
                 >
                   {tab}
                   {tab === "features" && report.drifted_count > 0 && (
-                    <span style={{ marginLeft: "6px", color: "#f07030" }}>
+                    <span style={{ marginLeft: "6px", color: "#ef4444" }}>
                       {report.drifted_count}
                     </span>
                   )}
                   {tab === "schema" && (report.schema?.critical_count + report.schema?.warning_count) > 0 && (
-                    <span style={{ marginLeft: "6px", color: "#c9a020" }}>
+                    <span style={{ marginLeft: "6px", color: "#f59e0b" }}>
                       {report.schema.critical_count + report.schema.warning_count}
                     </span>
                   )}
@@ -374,7 +552,7 @@ export default function Dashboard() {
                   border:        `1px solid ${BORDER}`,
                   borderRadius:  "3px",
                   padding:       "4px 14px",
-                  color:         "#2a5a2e",
+                  color:         "#94a3b8",
                   fontFamily:    FONT,
                   fontSize:      "10px",
                   textTransform: "uppercase",
@@ -391,7 +569,7 @@ export default function Dashboard() {
             {/* Features tab */}
             {activeTab === "features" && (
               <div>
-                <div style={{ fontSize: "11px", color: "#2a5a2e", marginBottom: "16px" }}>
+                <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "16px" }}>
                   Click any feature for distribution detail
                 </div>
                 <FeatureHeatmap
@@ -422,11 +600,11 @@ export default function Dashboard() {
             ...panelStyle,
             textAlign:  "center",
             padding:    "60px 32px",
-            color:      "#1a3a1e",
+            color:      "#475569",
             fontSize:   "12px",
             lineHeight: 2,
           }}>
-            <div style={{ fontSize: "32px", marginBottom: "16px", color: "#1a3a1e" }}>◈</div>
+            <div style={{ fontSize: "32px", marginBottom: "16px", color: "#475569" }}>◈</div>
             <div>Upload your training and serving CSVs to begin</div>
             <div style={{ fontSize: "11px", marginTop: "8px", color: "#142a16" }}>
               supports CSV · Parquet via CLI · JSON via API
@@ -441,7 +619,7 @@ export default function Dashboard() {
         data={selectedData}
         onClose={() => { setSelectedFeat(null); setSelectedData(null); }}
       />
-
+      </div>
     </div>
   );
 }

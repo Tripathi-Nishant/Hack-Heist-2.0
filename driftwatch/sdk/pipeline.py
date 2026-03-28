@@ -185,6 +185,10 @@ class DriftWatcher:
         """List of all past check() results — severity + drifted features."""
         return self._history
 
+    def set_reference(self, reference: pd.DataFrame):
+        """Update the reference data used for future drift checks."""
+        self._reference = reference
+
     @property
     def last_report(self) -> Optional[dict]:
         """Most recent check summary."""

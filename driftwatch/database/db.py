@@ -7,7 +7,7 @@ Falls back gracefully when DB is not configured (local dev).
 import json
 import psycopg2
 import psycopg2.extras
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 
 from driftwatch.utils.config import (
@@ -16,6 +16,10 @@ from driftwatch.utils.config import (
 from driftwatch.utils.logger import get_logger
 
 logger = get_logger("database")
+
+# ── In-memory fallback (used when DB_ENABLED is False) ────────────────────────
+_in_memory_reports: List[Dict] = []
+_in_memory_id_counter = 0
 
 
 # ── Connection ────────────────────────────────────────────────────────────────
@@ -125,11 +129,31 @@ def save_report(
 ) -> Optional[int]:
     """
     Save a drift report to PostgreSQL.
-    Returns the report ID or None if DB not configured.
+    Falls back to in-memory store when DB is not configured.
+    Returns the report ID.
     """
     if not DB_ENABLED:
-        logger.debug("DB not configured — skipping report save")
-        return None
+        global _in_memory_id_counter
+        _in_memory_id_counter += 1
+        rid = _in_memory_id_counter
+        record = {
+            "id":               rid,
+            "created_at":       datetime.now(timezone.utc).isoformat(),
+            "tag":              tag or report.get("tag"),
+            "overall_severity": report.get("overall_severity", "ok"),
+            "features_checked": report.get("features_checked", 0),
+            "drifted_count":    report.get("drifted_count", 0),
+            "drifted_features": report.get("drifted_features", []),
+            "reference_rows":   report.get("reference_rows"),
+            "current_rows":     report.get("current_rows"),
+            "report_json":      report,
+        }
+        _in_memory_reports.insert(0, record)  # newest first
+        # Keep at most 200 reports in memory
+        if len(_in_memory_reports) > 200:
+            _in_memory_reports.pop()
+        logger.info(f"Report saved to memory with ID {rid}")
+        return rid
 
     try:
         conn = get_connection()
@@ -169,10 +193,10 @@ def save_report(
 def get_report_history(limit: int = 50) -> List[Dict]:
     """
     Get recent drift reports for the history dashboard.
-    Returns empty list if DB not configured.
+    Falls back to in-memory store when DB is not configured.
     """
     if not DB_ENABLED:
-        return []
+        return _in_memory_reports[:limit]
 
     try:
         conn = get_connection()
@@ -181,7 +205,7 @@ def get_report_history(limit: int = 50) -> List[Dict]:
         cur.execute("""
             SELECT id, created_at, tag, overall_severity,
                    features_checked, drifted_count,
-                   drifted_features, reference_rows, current_rows
+                   drifted_features, reference_rows, current_rows, report_json
             FROM drift_reports
             ORDER BY created_at DESC
             LIMIT %s;
@@ -202,6 +226,7 @@ def get_report_history(limit: int = 50) -> List[Dict]:
                 "drifted_features": json.loads(row["drifted_features"] or "[]"),
                 "reference_rows":   row["reference_rows"],
                 "current_rows":     row["current_rows"],
+                "report_json":      json.loads(row["report_json"]) if row["report_json"] else None
             }
             for row in rows
         ]
@@ -209,6 +234,22 @@ def get_report_history(limit: int = 50) -> List[Dict]:
     except Exception as e:
         logger.error(f"Failed to get history: {e}")
         return []
+
+def get_report_by_id(report_id: int) -> Optional[Dict]:
+    """Get a single full report by ID."""
+    if not DB_ENABLED:
+        return None
+    try:
+        conn = get_connection()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur.execute("SELECT report_json FROM drift_reports WHERE id = %s", (report_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return json.loads(row["report_json"]) if row else None
+    except Exception as e:
+        logger.error(f"Failed to get report {report_id}: {e}")
+        return None
 
 
 def get_severity_trend(days: int = 7) -> List[Dict]:
