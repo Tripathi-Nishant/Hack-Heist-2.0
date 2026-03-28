@@ -3,7 +3,7 @@
 
 const BASE = process.env.REACT_APP_API_URL
   ? `${process.env.REACT_APP_API_URL}/api/v1`
-  : (window.location.hostname === "localhost" ? "/api/v1" : `http://${window.location.hostname}:8010/api/v1`);
+  : "/api/v1";
 
 async function request(method, path, body) {
   const opts = {
