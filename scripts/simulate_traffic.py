@@ -5,7 +5,8 @@ import pandas as pd
 from datetime import datetime
 
 # URLs
-MODEL_URL = "http://localhost:8011/predict"
+# URLs (Update with your EC2 IP for remote simulation)
+MODEL_URL = "http://65.2.180.52:8011/predict"
 
 def generate_sample(drift=False):
     """Generate a single inference request."""
