@@ -32,4 +32,5 @@ export const api = {
   history:           (limit)   => request("GET",    `/history?limit=${limit || 50}`),
   trend:             (days)    => request("GET",    `/history/trend?days=${days || 7}`),
   testAlert:         ()        => request("POST",   "/test-alert",  {}),
+  simulate:          (payload) => request("POST",   "/simulate",    payload),
 };

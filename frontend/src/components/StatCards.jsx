@@ -59,7 +59,7 @@ export default function StatCards({ report }) {
   if (!report) {
     return (
       <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-        {["Overall Status", "Features Checked", "Drifted", "Schema Issues"].map(label => (
+        {["Overall Status", "Features Checked", "Drifted", "Schema Issues", "Business Impact"].map(label => (
           <div key={label} style={{
             flex: 1, minWidth: "140px",
             background: "#0f172a",
@@ -80,9 +80,20 @@ export default function StatCards({ report }) {
     schema,
     reference_rows,
     current_rows,
+    features,
   } = report;
 
   const schemaIssues = (schema?.critical_count || 0) + (schema?.warning_count || 0);
+
+  // Calculate simulated Business Impact
+  let avgPsi = 0;
+  if (features) {
+    const psis = Object.values(features).map(f => f.psi || 0);
+    avgPsi = psis.length > 0 ? psis.reduce((a, b) => a + b, 0) / psis.length : 0;
+  }
+  
+  const accuracyLoss = Math.min(40, Math.round(avgPsi * 100 * 0.8));
+  const financialLoss = (accuracyLoss * 1450).toLocaleString(); // Simulated $ loss
 
   return (
     <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
@@ -109,6 +120,12 @@ export default function StatCards({ report }) {
         value={schemaIssues}
         sub={`${schema?.critical_count || 0} critical · ${schema?.warning_count || 0} warning`}
         severity={schema?.overall_severity || "stable"}
+      />
+      <Card
+        label="Business Impact"
+        value={`-${accuracyLoss}%`}
+        sub={`Est. Loss: $${financialLoss}/mo`}
+        severity={accuracyLoss > 20 ? "critical" : accuracyLoss > 5 ? "warning" : "stable"}
       />
     </div>
   );

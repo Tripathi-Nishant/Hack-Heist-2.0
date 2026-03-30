@@ -45,6 +45,14 @@ def detect_schema_drift(
     for col in common_cols:
         ref_dtype = str(reference[col].dtype)
         cur_dtype = str(current[col].dtype)
+        
+        # Treat numeric-to-numeric type shifts as non-critical
+        is_ref_num = pd.api.types.is_numeric_dtype(reference[col])
+        is_cur_num = pd.api.types.is_numeric_dtype(current[col])
+        
+        if is_ref_num and is_cur_num:
+            continue
+            
         if ref_dtype != cur_dtype:
             issues.append({
                 "column": col,

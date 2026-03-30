@@ -59,24 +59,37 @@ class ClaudeExplainer:
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        if not self.available:
+        # Detect placeholder keys or missing client
+        is_placeholder = "your-key-here" in self.api_key
+        if not self.available or is_placeholder:
             result = self._fallback_report(report)
             self._cache[cache_key] = result
             return result
 
-        full_prompt    = build_explanation_prompt(report)
-        summary_prompt = build_summary_prompt(report)
+        try:
+            full_prompt    = build_explanation_prompt(report)
+            summary_prompt = build_summary_prompt(report)
 
-        full_text = self._call(full_prompt)
-        summary   = self._call(summary_prompt)
+            full_text = self._call(full_prompt)
+            summary   = self._call(summary_prompt)
 
-        result = Explanation(
-            summary=summary.strip(),
-            full_text=full_text.strip(),
-            used_llm=True,
-            model=self.MODEL,
-            feature=None
-        )
+            # If the call returned an error message, trigger fallback
+            if full_text.startswith("[LLM"):
+                raise RuntimeError(full_text)
+
+            result = Explanation(
+                summary=summary.strip(),
+                full_text=full_text.strip(),
+                used_llm=True,
+                model=self.MODEL,
+                feature=None
+            )
+        except Exception as e:
+            # Persistent fallback on any error
+            result = self._fallback_report(report)
+            result.full_text = f"⚠️ [LLM Offline - showing rule-based analysis]\n\n{result.full_text}"
+            result.used_llm = False
+
         self._cache[cache_key] = result
         return result
 
@@ -93,21 +106,31 @@ class ClaudeExplainer:
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        if not self.available:
+        is_placeholder = "your-key-here" in self.api_key
+        if not self.available or is_placeholder:
             result = self._fallback_feature(feature_name, feature_data)
             self._cache[cache_key] = result
             return result
 
-        prompt    = build_feature_prompt(feature_name, feature_data, context)
-        full_text = self._call(prompt)
+        try:
+            prompt    = build_feature_prompt(feature_name, feature_data, context)
+            full_text = self._call(prompt)
 
-        result = Explanation(
-            summary=f"Deep-dive: {feature_name}",
-            full_text=full_text.strip(),
-            used_llm=True,
-            model=self.MODEL,
-            feature=feature_name
-        )
+            if full_text.startswith("[LLM"):
+                raise RuntimeError(full_text)
+
+            result = Explanation(
+                summary=f"Deep-dive: {feature_name}",
+                full_text=full_text.strip(),
+                used_llm=True,
+                model=self.MODEL,
+                feature=feature_name
+            )
+        except Exception:
+            result = self._fallback_feature(feature_name, feature_data)
+            result.full_text = f"⚠️ [LLM Offline]\n{result.full_text}"
+            result.used_llm = False
+
         self._cache[cache_key] = result
         return result
 
@@ -115,6 +138,8 @@ class ClaudeExplainer:
 
     def _call(self, prompt: str) -> str:
         """Single Claude API call. Returns text content."""
+        if not self._client:
+            return "[LLM call failed: client not initialised]"
         try:
             message = self._client.messages.create(
                 model=self.MODEL,

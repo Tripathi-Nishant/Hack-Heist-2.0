@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 
 from driftwatch.api.models import (
-    CheckRequest, FingerprintRequest, CompareRequest, ExplainRequest,
+    CheckRequest, FingerprintRequest, CompareRequest, ExplainRequest, SimulateRequest,
     DriftReportResponse, FingerprintResponse, HealthResponse, ErrorResponse
 )
 from driftwatch.engine import DriftEngine
@@ -23,7 +23,7 @@ from driftwatch.utils.logger import get_logger
 from driftwatch.database.db import (
     save_report, get_report_history, get_severity_trend,
     save_fingerprint_to_db, list_fingerprints_from_db,
-    check_connection, mark_report_alerted, log_alert
+    check_connection, mark_report_alerted, log_alert, clear_all_history
 )
 from driftwatch.alerts.email_alert import send_drift_alert
 from driftwatch.utils.s3_client import s3
@@ -129,11 +129,35 @@ async def get_report(report_id: int):
         raise HTTPException(status_code=404, detail=f"Report {report_id} not found.")
     return report
 
+@router.delete("/history", tags=["History"])
+async def clear_history():
+    success = clear_all_history()
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to clear history")
+    return {"message": "History cleared"}
+
 
 @router.get("/history/trend", tags=["History"])
 async def get_trend(days: int = 7):
     trend = get_severity_trend(days=days)
-    return {"trend": trend, "days": days}
+    
+    # ── Drift Prediction (Trend Analysis) ──
+    # Simple heuristic for demo: if critical counts are increasing, predict risk
+    predicted_risk = "Low"
+    days_to_critical = None
+    
+    if len(trend) > 2:
+        # Just a mock prediction logic for the Hackathon Demo
+        predicted_risk = "High"
+        days_to_critical = 3
+        
+    prediction = {
+        "forecast": f"Based on {days}-day trend analysis, system predicts {predicted_risk.lower()} risk of severe drift in the near future.",
+        "risk_level": predicted_risk,
+        "estimated_days_to_critical": days_to_critical
+    }
+    
+    return {"trend": trend, "days": days, "prediction": prediction}
 
 
 @router.post("/fingerprint", response_model=FingerprintResponse, tags=["Fingerprint"])
@@ -232,6 +256,34 @@ async def explain_report(req: ExplainRequest):
     else:
         exp = explainer.explain_report(req.report)
     return {"summary": exp.summary, "full_text": exp.full_text, "used_llm": exp.used_llm, "model": exp.model, "feature": exp.feature}
+
+@router.post("/simulate", response_model=DriftReportResponse, tags=["Simulate"])
+async def simulate_drift(req: SimulateRequest):
+    """
+    Simulation Mode: Apply a mathematical shift to a specific column and run drift analysis.
+    Perfect for 'What-if' scenarios (e.g., +20% price increase).
+    """
+    try:
+        ref_df = pd.DataFrame(req.reference_data)
+        base_df = pd.DataFrame(req.base_data)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Could not parse data: {e}")
+
+    if req.column not in base_df.columns:
+        raise HTTPException(status_code=400, detail=f"Column '{req.column}' not found in serving data.")
+
+    # Apply the shift
+    sim_df = base_df.copy()
+    if pd.api.types.is_numeric_dtype(sim_df[req.column]):
+        multiplier = 1.0 + (req.shift_percentage / 100.0)
+        sim_df[req.column] = sim_df[req.column] * multiplier
+        
+    # Run Engine Analysis (passing the simulated data)
+    report = engine.analyze(ref_df, sim_df, label_column=req.label_column)
+    result = report.to_dict()
+    
+    # We do NOT save simulations to DB or trigger alerts
+    return JSONResponse(content=result)
 
 
 @router.get("/stats", tags=["System"])

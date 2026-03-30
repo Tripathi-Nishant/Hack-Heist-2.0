@@ -20,7 +20,7 @@ app = FastAPI(title="DriftWatch - Real-World Model Server")
 # Global variables
 TRAIN_DATA = os.path.join(BASE_DIR, "data", "samples", "train.csv")
 API_URL    = os.getenv("API_URL", "http://localhost:8010/api/v1/check")
-BATCH_SIZE = int(os.getenv("BATCH_SIZE", 20))
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", 5))
 
 model = None
 watcher = None
@@ -28,11 +28,11 @@ in_memory_batch = []
 needs_retrain = False # New flag for deferred reset
 
 class InferenceRequest(BaseModel):
-    age: float
+    age: int
     income: float
-    credit_score: float
+    credit_score: int
     transaction_amount: float
-    num_transactions: float
+    num_transactions: int
     region: str
 
 class InferenceResponse(BaseModel):
@@ -121,7 +121,9 @@ def startup():
         train_df = pd.read_csv(TRAIN_DATA)
         
         print("Initializing DriftWatcher SDK...", flush=True)
-        watcher = DriftWatcher(reference=train_df, label_column="is_fraud")
+        # Ensure reference matches the serving data (plus label) to avoid false Schema Drift
+        ref_cols = ["age", "income", "credit_score", "transaction_amount", "num_transactions", "region", "is_fraud"]
+        watcher = DriftWatcher(reference=train_df[ref_cols].copy(), label_column="is_fraud")
         
         print("Training RandomForest model...", flush=True)
         FEATURES = ["age", "income", "credit_score", "transaction_amount", "num_transactions"]

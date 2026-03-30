@@ -15,6 +15,7 @@ from driftwatch.detectors.statistical import (
     calculate_chi_squared, psi_severity
 )
 from driftwatch.detectors.schema import detect_schema_drift, get_feature_stats
+from driftwatch.action_engine import ActionEngine
 
 
 class DriftReport:
@@ -85,7 +86,16 @@ class DriftEngine:
         Run full drift analysis.
         Optionally exclude label_column from feature drift checks.
         """
-        # Drop label column if provided
+        # ── Concept Drift (Label Column analysis) ────────────────────────────
+        concept_drift = False
+        feature_results = {}
+        if label_column and label_column in reference.columns and label_column in current.columns:
+            lbl_stats = self._analyze_feature(reference[label_column], current[label_column])
+            if lbl_stats.get("severity") in ("warning", "critical"):
+                concept_drift = True
+            feature_results[label_column] = lbl_stats
+
+        # Drop label column for main feature checks
         ref = reference.drop(columns=[label_column]) if label_column and label_column in reference.columns else reference.copy()
         cur = current.drop(columns=[label_column]) if label_column and label_column in current.columns else current.copy()
 
@@ -93,7 +103,6 @@ class DriftEngine:
         schema_result = detect_schema_drift(ref, cur)
 
         # ── Per-feature statistical drift ─────────────────────────────────────
-        feature_results = {}
         common_cols = list(set(ref.columns) & set(cur.columns))
 
         for col in common_cols:
@@ -110,7 +119,8 @@ class DriftEngine:
         else:
             overall = "stable"
 
-        report = {
+        # ── Build the Report Dictionaries ─────────────────────────────────────
+        report_data = {
             "timestamp": datetime.utcnow().isoformat(),
             "overall_severity": overall,
             "features_checked": len(common_cols),
@@ -120,9 +130,15 @@ class DriftEngine:
             "features": feature_results,
             "reference_rows": len(reference),
             "current_rows": len(current),
+            "concept_drift": concept_drift,
         }
 
-        return DriftReport(report)
+        # ── Action Engine ─────────────────────────────────────────────────────
+        action_data = ActionEngine.analyze_drift_profile(report_data, concept_drift=concept_drift)
+        # Merge action data back to report
+        report_data.update(action_data)
+
+        return DriftReport(report_data)
 
     def _analyze_feature(
         self,

@@ -7,7 +7,7 @@ import {
 const FONT = "'Outfit', sans-serif";
 const FONT_MONO = "'JetBrains Mono', monospace";
 
-export default function DriftTimeline({ history = [] }) {
+export default function DriftTimeline({ history = [], prediction = null }) {
   const latestReport = history[0] || {};
   const severity = latestReport.overall_severity || "stable";
   
@@ -124,9 +124,17 @@ export default function DriftTimeline({ history = [] }) {
         fontSize: "10px", 
         color: "#475569", 
         fontFamily: FONT,
-        textAlign: "right"
+        display: "flex",
+        justifyContent: "space-between"
       }}>
-        Metric: Number of features showing statistical drift (PSI {" > "} 0.1)
+        {prediction && (
+          <div style={{ color: prediction.risk_level === "High" ? "#ef4444" : "#10b981", background: "#020617", padding: "4px 8px", borderRadius: "4px", border: "1px solid currentColor" }}>
+             🔮 <b>AI Forecast:</b> {prediction.forecast}
+          </div>
+        )}
+        <div style={{ alignSelf: "flex-end" }}>
+          Metric: Number of features showing statistical drift (PSI {">"} 0.1)
+        </div>
       </div>
     </div>
   );

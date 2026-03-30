@@ -235,6 +235,29 @@ def get_report_history(limit: int = 50) -> List[Dict]:
         logger.error(f"Failed to get history: {e}")
         return []
 
+def clear_all_history():
+    """Admin function to clear in-memory history and DB history for a fresh demo."""
+    if not DB_ENABLED:
+        global _in_memory_reports, _in_memory_id_counter
+        _in_memory_reports.clear()
+        _in_memory_id_counter = 0
+        logger.info("Cleared in-memory drift history.")
+        return True
+    
+    try:
+        conn = get_connection()
+        cur  = conn.cursor()
+        cur.execute("TRUNCATE TABLE alert_log CASCADE;")
+        cur.execute("TRUNCATE TABLE drift_reports CASCADE;")
+        conn.commit()
+        cur.close()
+        conn.close()
+        logger.info("Cleared DB drift history.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to clear history: {e}")
+        return False
+
 def get_report_by_id(report_id: int) -> Optional[Dict]:
     """Get a single full report by ID."""
     if not DB_ENABLED:

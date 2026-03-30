@@ -32,14 +32,29 @@ def calculate_psi(
     if len(reference) == 0 or len(current) == 0:
         return 0.0
 
-    actual_bins = min(bins, max(3, len(current) // 4))
+    # Auto-adjust bins for stability with small batches
+    if len(current) < 100:
+        actual_bins = min(5, max(3, len(current) // 10))
+    else:
+        actual_bins = min(bins, max(5, len(current) // 20))
 
-    # Build bins from reference distribution
-    breakpoints = np.linspace(
-        min(reference.min(), current.min()),
-        max(reference.max(), current.max()),
-        actual_bins + 1
-    )
+    # Quantile-based binning on reference is much more stable than linear binning
+    try:
+        # Use quantiles for reference, and then apply those edges to both
+        _, bins_edges = pd.qcut(reference, actual_bins, retbins=True, duplicates='drop')
+        
+        # Ensure the edges cover the current data as well
+        bins_edges = list(bins_edges)
+        bins_edges[0] = min(bins_edges[0], current.min())
+        bins_edges[-1] = max(bins_edges[-1], current.max())
+        breakpoints = np.array(bins_edges)
+    except Exception:
+        # Fallback to linear if qcut fails (e.g., if ref is constant)
+        breakpoints = np.linspace(
+            min(reference.min(), current.min()),
+            max(reference.max(), current.max()),
+            actual_bins + 1
+        )
 
     ref_counts, _ = np.histogram(reference, bins=breakpoints)
     cur_counts, _ = np.histogram(current, bins=breakpoints)
@@ -55,7 +70,7 @@ def calculate_psi(
 def psi_severity(psi: float) -> str:
     if psi < 0.10:
         return "stable"
-    elif psi < 0.20:
+    elif psi < 0.25:
         return "warning"
     else:
         return "critical"

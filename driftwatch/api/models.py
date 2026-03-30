@@ -54,6 +54,14 @@ class ExplainRequest(BaseModel):
     report: Dict[str, Any] = Field(..., description="Full report dict from a previous check")
     feature: Optional[str] = Field(None, description="If set, explain only this feature")
 
+class SimulateRequest(BaseModel):
+    """POST /simulate — run a what-if scenario on a specific column."""
+    base_data: List[Dict[str, Any]] = Field(..., description="The serving data to manipulate.", min_length=1)
+    reference_data: List[Dict[str, Any]] = Field(..., description="The training data to compare against.", min_length=1)
+    column: str = Field(..., description="The numerical column to shift.")
+    shift_percentage: float = Field(..., description="Percentage to shift the column (e.g. 20 for +20%)")
+    label_column: Optional[str] = None
+
 
 # ── Responses ─────────────────────────────────────────────────────────────────
 
@@ -109,6 +117,14 @@ class DriftReportResponse(BaseModel):
     drift_schema: Dict[str, Any] = Field(..., alias="schema")
     features: Dict[str, Any]
     explanation: Optional[ExplanationResult] = None
+    
+    # New Intelligent System fields
+    concept_drift: Optional[bool] = False
+    drift_type: Optional[str] = None
+    recommended_action: Optional[str] = None
+    decision: Optional[str] = None
+    confidence_score: Optional[float] = None
+    estimated_impact_cost: Optional[float] = None
 
 
 class FingerprintResponse(BaseModel):

@@ -179,11 +179,25 @@ export default function Dashboard() {
   const [liveMode,     setLiveMode]     = useState(true);
   const [retraining,   setRetraining]   = useState(false);
 
+  // Simulation State
+  const [simCol,       setSimCol]       = useState("");
+  const [simShift,     setSimShift]     = useState(20);
+  const [simLoading,   setSimLoading]   = useState(false);
+  
+  // Trend / Prediction state
+  const [prediction,   setPrediction]   = useState(null);
+
   const fetchHistory = useCallback(async () => {
     try {
       const resp = await fetch("/api/v1/history");
       const data = await resp.json();
       setHistory(data.reports || []);
+      
+      const trendResp = await fetch("/api/v1/history/trend");
+      const trendData = await trendResp.json();
+      if (trendData.prediction) {
+        setPrediction(trendData.prediction);
+      }
     } catch (e) {
       console.error("Failed to fetch history:", e);
     }
@@ -278,7 +292,29 @@ export default function Dashboard() {
     }
   }
 
-  const TABS = ["features", "schema", "explain"];
+  async function runSimulation() {
+    if (!trainData || !servingData || !simCol) return;
+    setSimLoading(true);
+    setError(null);
+    try {
+      const result = await api.simulate({
+        reference_data: trainData,
+        base_data: servingData,
+        column: simCol,
+        shift_percentage: Number(simShift),
+        label_column: labelColumn || undefined
+      });
+      setReport(result);
+      setActiveTab("features");
+      setTimeout(() => alert("Simulation complete. Viewing simulated report!"), 100);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSimLoading(false);
+    }
+  }
+
+  const TABS = ["features", "schema", "explain", "simulate"];
 
   return (
     <div style={{
@@ -325,301 +361,383 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div style={{ display: "flex", padding: "28px 32px", maxWidth: "1400px", margin: "0 auto", gap: "28px" }}>
+      <div style={{ display: "flex", padding: "28px 32px", maxWidth: "1400px", margin: "0 auto", gap: "28px", flexDirection: "column" }}>
         
-        {/* Sidebar: History */}
-        <div style={{ width: "280px", flexShrink: 0 }}>
-          <div style={{ ...panelStyle, padding: "16px" }}>
-            <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between" }}>
-              <span>Recent Checks</span>
-              <span 
-                onClick={() => setLiveMode(!liveMode)}
-                style={{ color: liveMode ? "#10b981" : "#444", cursor: "pointer" }}
-              >
-                {liveMode ? "● LIVE" : "○ MANUAL"}
-              </span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {history.length === 0 && (
-                <div style={{ fontSize: "10px", color: "#222", fontStyle: "italic" }}>
-                  Waiting for incoming reports...
+        <div style={{ display: "flex", gap: "28px" }}>
+            {/* Sidebar: History */}
+            <div style={{ width: "280px", flexShrink: 0 }}>
+              <div style={{ ...panelStyle, padding: "16px" }}>
+                <div style={{ ...labelStyle, display: "flex", justifyContent: "space-between" }}>
+                  <span>Recent Checks</span>
+                  <span 
+                    onClick={() => setLiveMode(!liveMode)}
+                    style={{ color: liveMode ? "#10b981" : "#444", cursor: "pointer" }}
+                  >
+                    {liveMode ? "● LIVE" : "○ MANUAL"}
+                  </span>
                 </div>
-              )}
-              {history.map(item => (
-                <div 
-                  key={item.id}
-                  onClick={() => {
-                    if (item.report_json) {
-                      setReport(item.report_json);
-                      setActiveTab("features");
-                    } else {
-                      loadReportFromHistory(item.id);
-                    }
-                  }}
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {history.length === 0 && (
+                    <div style={{ fontSize: "10px", color: "#222", fontStyle: "italic" }}>
+                      Waiting for incoming reports...
+                    </div>
+                  )}
+                  {history.map(item => (
+                    <div 
+                      key={item.id}
+                      onClick={() => {
+                        if (item.report_json) {
+                          setReport(item.report_json);
+                          setActiveTab("features");
+                        } else {
+                          loadReportFromHistory(item.id);
+                        }
+                      }}
+                      style={{
+                        padding: "10px",
+                        borderRadius: "3px",
+                        background: report?.id === item.id ? "#064e3b" : "#0f172a",
+                        border: `1px solid ${report?.id === item.id ? "#10b981" : "#1a2a1c"}`,
+                        cursor: "pointer",
+                        fontSize: "11px",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span style={{ color: "#f8fafc" }}>{item.tag || `Report #${item.id}`}</span>
+                        <span style={{ 
+                          color: item.overall_severity === "critical" ? "#ef4444" : "#10b981",
+                          fontSize: "9px"
+                        }}>
+                          {item.overall_severity?.toUpperCase()}
+                        </span>
+                      </div>
+                      <div style={{ color: "#64748b", fontSize: "9px" }}>
+                        {new Date(item.created_at).toLocaleTimeString()} · {item.drifted_features?.length || 0} drifted
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+
+            {/* Upload + config row */}
+            <div style={{ ...panelStyle, marginBottom: "20px" }}>
+              <div style={labelStyle}>Data Input</div>
+              <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
+                <UploadZone label="training" onData={setTrainData}   data={trainData}   />
+                <UploadZone label="serving"  onData={setServingData} data={servingData} />
+              </div>
+
+              <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  placeholder="label column (optional)"
+                  value={labelColumn}
+                  onChange={e => setLabelColumn(e.target.value)}
                   style={{
-                    padding: "10px",
+                    background:   "#0f172a",
+                    border:       `1px solid ${BORDER}`,
                     borderRadius: "3px",
-                    background: report?.id === item.id ? "#064e3b" : "#0f172a",
-                    border: `1px solid ${report?.id === item.id ? "#10b981" : "#1a2a1c"}`,
-                    cursor: "pointer",
-                    fontSize: "11px",
+                    padding:      "8px 12px",
+                    color:        "#10b981",
+                    fontFamily:   FONT,
+                    fontSize:     "12px",
+                    outline:      "none",
+                    flex:         "1",
+                    minWidth:     "200px",
+                  }}
+                />
+                <button
+                  onClick={runCheck}
+                  disabled={!trainData || !servingData || loading}
+                  style={{
+                    background:    trainData && servingData ? "#064e3b" : "#0f172a",
+                    border:        `1px solid ${trainData && servingData ? "#10b981" : BORDER}`,
+                    borderRadius:  "3px",
+                    padding:       "8px 24px",
+                    color:         trainData && servingData ? "#10b981" : "#64748b",
+                    fontFamily:    FONT,
+                    fontSize:      "12px",
+                    cursor:        trainData && servingData ? "pointer" : "default",
+                    letterSpacing: "0.08em",
+                    transition:    "all 0.15s",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                    <span style={{ color: "#f8fafc" }}>{item.tag || `Report #${item.id}`}</span>
-                    <span style={{ 
-                      color: item.overall_severity === "critical" ? "#ef4444" : "#10b981",
-                      fontSize: "9px"
-                    }}>
-                      {item.overall_severity?.toUpperCase()}
-                    </span>
-                  </div>
-                  <div style={{ color: "#64748b", fontSize: "9px" }}>
-                    {new Date(item.created_at).toLocaleTimeString()} · {item.drifted_features?.length || 0} drifted
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-
-        {/* Upload + config row */}
-        <div style={{ ...panelStyle, marginBottom: "20px" }}>
-          <div style={labelStyle}>Data Input</div>
-          <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
-            <UploadZone label="training" onData={setTrainData}   data={trainData}   />
-            <UploadZone label="serving"  onData={setServingData} data={servingData} />
-          </div>
-
-          <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-            <input
-              placeholder="label column (optional)"
-              value={labelColumn}
-              onChange={e => setLabelColumn(e.target.value)}
-              style={{
-                background:   "#0f172a",
-                border:       `1px solid ${BORDER}`,
-                borderRadius: "3px",
-                padding:      "8px 12px",
-                color:        "#10b981",
-                fontFamily:   FONT,
-                fontSize:     "12px",
-                outline:      "none",
-                flex:         "1",
-                minWidth:     "200px",
-              }}
-            />
-            <button
-              onClick={runCheck}
-              disabled={!trainData || !servingData || loading}
-              style={{
-                background:    trainData && servingData ? "#064e3b" : "#0f172a",
-                border:        `1px solid ${trainData && servingData ? "#10b981" : BORDER}`,
-                borderRadius:  "3px",
-                padding:       "8px 24px",
-                color:         trainData && servingData ? "#10b981" : "#64748b",
-                fontFamily:    FONT,
-                fontSize:      "12px",
-                cursor:        trainData && servingData ? "pointer" : "default",
-                letterSpacing: "0.08em",
-                transition:    "all 0.15s",
-              }}
-            >
-              {loading ? "ANALYSING..." : "RUN CHECK"}
-            </button>
-            
-            <button
-              onClick={() => {
-                const csvContent = "data:text/csv;charset=utf-8," 
-                  + ["Feature,Metric,Severity", ...Object.entries(report?.features || {}).map(([k,v]) => `${k},${v.psi || v.chi2_test?.p_value},${v.severity}`)].join("\n");
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", `drift_report_${report?.id || 'export'}.csv`);
-                document.body.appendChild(link);
-                link.click();
-              }}
-              disabled={!report}
-              style={{
-                background:    "none",
-                border:        `1px solid ${report ? "#334155" : BORDER}`,
-                borderRadius:  "3px",
-                padding:       "8px 16px",
-                color:         report ? "#94a3b8" : "#475569",
-                fontFamily:    FONT,
-                fontSize:      "12px",
-                cursor:        report ? "pointer" : "default",
-                letterSpacing: "0.05em",
-                transition:    "all 0.15s",
-              }}
-            >
-              DOWNLOAD REPORT
-            </button>
-
-            {report && report.overall_severity === "critical" && (
-              <button
-                onClick={handleRetrain}
-                disabled={retraining}
-                style={{
-                  background:    "#ef444415",
-                  border:        "1px solid #ef4444",
-                  borderRadius:  "3px",
-                  padding:       "8px 20px",
-                  color:         "#ef4444",
-                  fontFamily:    FONT,
-                  fontSize:      "12px",
-                  fontWeight:    700,
-                  cursor:        retraining ? "default" : "pointer",
-                  letterSpacing: "0.05em",
-                  transition:    "all 0.15s",
-                  boxShadow:     "0 0 15px rgba(239, 68, 68, 0.2)",
-                  marginLeft:    "auto",
-                }}
-              >
-                {retraining ? "REFITTING MODEL..." : "APPROVE RETRAINING"}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div style={{
-            background: "#3d1a0a", border: "1px solid #c0440a44",
-            borderRadius: "4px", padding: "12px 16px",
-            color: "#ef4444", fontSize: "12px", marginBottom: "20px",
-          }}>
-            Error: {error}
-          </div>
-        )}
-
-        {/* Drift Timeline */}
-        <DriftTimeline history={history} />
-
-        {/* Stat cards */}
-        <div style={{ marginBottom: "20px" }}>
-          <StatCards report={report} />
-        </div>
-
-        {/* Tabs + content */}
-        {report && (
-          <div style={panelStyle}>
-
-            {/* Tab bar */}
-            <div style={{ display: "flex", gap: "0", marginBottom: "20px", borderBottom: `1px solid ${BORDER}` }}>
-              {TABS.map(tab => (
+                  {loading ? "ANALYSING..." : "RUN CHECK"}
+                </button>
+                
                 <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => {
+                    const csvContent = "data:text/csv;charset=utf-8," 
+                      + ["Feature,Metric,Severity", ...Object.entries(report?.features || {}).map(([k,v]) => `${k},${v.psi || v.chi2_test?.p_value},${v.severity}`)].join("\n");
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodedUri);
+                    link.setAttribute("download", `drift_report_${report?.id || 'export'}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                  }}
+                  disabled={!report}
                   style={{
                     background:    "none",
-                    border:        "none",
-                    borderBottom:  activeTab === tab ? "2px solid #10b981" : "2px solid transparent",
-                    padding:       "8px 20px",
-                    color:         activeTab === tab ? "#10b981" : "#94a3b8",
+                    border:        `1px solid ${report ? "#334155" : BORDER}`,
+                    borderRadius:  "3px",
+                    padding:       "8px 16px",
+                    color:         report ? "#94a3b8" : "#475569",
                     fontFamily:    FONT,
-                    fontSize:      "11px",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.1em",
-                    cursor:        "pointer",
-                    marginBottom:  "-1px",
-                    transition:    "color 0.15s",
+                    fontSize:      "12px",
+                    cursor:        report ? "pointer" : "default",
+                    letterSpacing: "0.05em",
+                    transition:    "all 0.15s",
                   }}
                 >
-                  {tab}
-                  {tab === "features" && report.drifted_count > 0 && (
-                    <span style={{ marginLeft: "6px", color: "#ef4444" }}>
-                      {report.drifted_count}
-                    </span>
-                  )}
-                  {tab === "schema" && (report.schema?.critical_count + report.schema?.warning_count) > 0 && (
-                    <span style={{ marginLeft: "6px", color: "#f59e0b" }}>
-                      {report.schema.critical_count + report.schema.warning_count}
-                    </span>
-                  )}
+                  DOWNLOAD REPORT
                 </button>
-              ))}
 
-              {/* Explain button */}
-              <button
-                onClick={fetchExplanation}
-                disabled={explLoading}
-                style={{
-                  marginLeft:    "auto",
-                  background:    "none",
-                  border:        `1px solid ${BORDER}`,
-                  borderRadius:  "3px",
-                  padding:       "4px 14px",
-                  color:         "#94a3b8",
-                  fontFamily:    FONT,
-                  fontSize:      "10px",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.1em",
-                  cursor:        "pointer",
-                  alignSelf:     "center",
-                  marginBottom:  "4px",
-                }}
-              >
-                {explLoading ? "..." : "⟳ explain"}
-              </button>
+                {report && report.overall_severity === "critical" && (
+                  <button
+                    onClick={handleRetrain}
+                    disabled={retraining}
+                    style={{
+                      background:    "#ef444415",
+                      border:        "1px solid #ef4444",
+                      borderRadius:  "3px",
+                      padding:       "8px 20px",
+                      color:         "#ef4444",
+                      fontFamily:    FONT,
+                      fontSize:      "12px",
+                      fontWeight:    700,
+                      cursor:        retraining ? "default" : "pointer",
+                      letterSpacing: "0.05em",
+                      transition:    "all 0.15s",
+                      boxShadow:     "0 0 15px rgba(239, 68, 68, 0.2)",
+                      marginLeft:    "auto",
+                    }}
+                  >
+                    {retraining ? "REFITTING MODEL..." : "APPROVE RETRAINING"}
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Features tab */}
-            {activeTab === "features" && (
-              <div>
-                <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "16px" }}>
-                  Click any feature for distribution detail
-                </div>
-                <FeatureHeatmap
-                  features={report.features}
-                  onFeatureClick={openFeature}
-                />
+            {/* Error */}
+            {error && (
+              <div style={{
+                background: "#3d1a0a", border: "1px solid #c0440a44",
+                borderRadius: "4px", padding: "12px 16px",
+                color: "#ef4444", fontSize: "12px", marginBottom: "20px",
+              }}>
+                Error: {error}
               </div>
             )}
 
-            {/* Schema tab */}
-            {activeTab === "schema" && (
-              <SchemaPanel schema={report.schema} />
+            {/* Decision Engine Output Box */}
+            {report && report.decision && (
+              <div style={{
+                background: "#020617",
+                border: "1px solid #10b981",
+                borderRadius: "4px",
+                padding: "20px",
+                marginBottom: "20px",
+                boxShadow: "0 0 20px rgba(16, 185, 129, 0.1)",
+              }}>
+                <div style={{ ...labelStyle, color: "#10b981", display: "flex", justifyContent: "space-between" }}>
+                  <span>🧠 SYSTEM DECISION ENGINE OUTPUT</span>
+                  <span>Confidence Score: {(report.confidence_score * 100).toFixed(0)}%</span>
+                </div>
+                <div style={{ display: "flex", gap: "24px", marginTop: "12px", flexWrap: "wrap", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: "10px", color: "#64748b" }}>CLASSIFICATION</div>
+                    <div style={{ fontSize: "16px", color: "#f8fafc", fontWeight: 600 }}>{report.drift_type} {report.concept_drift && "🚨"}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "10px", color: "#64748b" }}>SEVERITY</div>
+                    <div style={{ fontSize: "16px", color: report.overall_severity === "critical" ? "#ef4444" : report.overall_severity === "warning" ? "#f59e0b" : "#10b981", fontWeight: 600 }}>{report.overall_severity.toUpperCase()}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "10px", color: "#64748b" }}>RECOMMENDED ACTION</div>
+                    <div style={{ fontSize: "16px", color: "#38bdf8", fontWeight: 600 }}>{report.recommended_action}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "10px", color: "#64748b" }}>FINANCIAL DECISION</div>
+                    <div style={{ fontSize: "16px", color: report.decision === "ACT" || report.decision === "PAUSE" ? "#ef4444" : "#10b981", fontWeight: 600 }}>{report.decision}</div>
+                  </div>
+                </div>
+              </div>
             )}
 
-            {/* Explain tab */}
-            {activeTab === "explain" && (
-              <ExplanationCard
-                explanation={report.explanation}
-                loading={explLoading}
-              />
-            )}
-          </div>
-        )}
+            {/* Drift Timeline */}
+            <DriftTimeline history={history} prediction={prediction} />
 
-        {/* Empty state */}
-        {!report && !loading && (
-          <div style={{
-            ...panelStyle,
-            textAlign:  "center",
-            padding:    "60px 32px",
-            color:      "#475569",
-            fontSize:   "12px",
-            lineHeight: 2,
-          }}>
-            <div style={{ fontSize: "32px", marginBottom: "16px", color: "#475569" }}>◈</div>
-            <div>Upload your training and serving CSVs to begin</div>
-            <div style={{ fontSize: "11px", marginTop: "8px", color: "#142a16" }}>
-              supports CSV · Parquet via CLI · JSON via API
+            {/* Stat cards */}
+            <div style={{ marginBottom: "20px" }}>
+              <StatCards report={report} />
             </div>
+
+            {/* Tabs + content */}
+            {report && (
+              <div style={panelStyle}>
+
+                {/* Tab bar */}
+                <div style={{ display: "flex", gap: "0", marginBottom: "20px", borderBottom: `1px solid ${BORDER}` }}>
+                  {TABS.map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      style={{
+                        background:    "none",
+                        border:        "none",
+                        borderBottom:  activeTab === tab ? "2px solid #10b981" : "2px solid transparent",
+                        padding:       "8px 20px",
+                        color:         activeTab === tab ? "#10b981" : "#94a3b8",
+                        fontFamily:    FONT,
+                        fontSize:      "11px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.1em",
+                        cursor:        "pointer",
+                        marginBottom:  "-1px",
+                        transition:    "color 0.15s",
+                      }}
+                    >
+                      {tab}
+                      {tab === "features" && report.drifted_count > 0 && (
+                        <span style={{ marginLeft: "6px", color: "#ef4444" }}>
+                          {report.drifted_count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+
+                  <button
+                    onClick={fetchExplanation}
+                    disabled={explLoading}
+                    style={{
+                      marginLeft:    "auto",
+                      background:    "none",
+                      border:        `1px solid ${BORDER}`,
+                      borderRadius:  "3px",
+                      padding:       "4px 14px",
+                      color:         "#94a3b8",
+                      fontFamily:    FONT,
+                      fontSize:      "10px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.1em",
+                      cursor:        "pointer",
+                      alignSelf:     "center",
+                      marginBottom:  "4px",
+                    }}
+                  >
+                    {explLoading ? "..." : "⟳ explain"}
+                  </button>
+                </div>
+
+                {/* Features tab */}
+                {activeTab === "features" && (
+                  <div>
+                    <FeatureHeatmap
+                      features={report.features}
+                      onFeatureClick={openFeature}
+                    />
+                  </div>
+                )}
+
+                {/* Schema tab */}
+                {activeTab === "schema" && (
+                  <SchemaPanel schema={report.schema} />
+                )}
+
+                {/* Explain tab */}
+                {activeTab === "explain" && (
+                  <ExplanationCard
+                    explanation={report.explanation}
+                    loading={explLoading}
+                  />
+                )}
+
+                {/* Simulate tab */}
+                {activeTab === "simulate" && (
+                  <div style={{ padding: "20px", color: "#cbd5e1", fontFamily: FONT }}>
+                    <h3 style={{ margin: "0 0 8px 0", color: "#f8fafc", fontSize: "16px", fontWeight: 600 }}>Simulation Engine 🧪</h3>
+                    <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "24px", maxWidth: "600px" }}>
+                      Run a what-if scenario on the current data to see how the system would react prior to real world impact.
+                      Select a numerical feature to artificially shift its values.
+                    </p>
+                    <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "20px" }}>
+                      <select 
+                        value={simCol}
+                        onChange={e => setSimCol(e.target.value)}
+                        style={{
+                          background: "#0f172a", border: `1px solid ${BORDER}`, color: "#10b981",
+                          padding: "8px 12px", borderRadius: "4px", outline: "none", fontSize: "12px", fontFamily: FONT
+                        }}
+                      >
+                        <option value="">-- Select Feature --</option>
+                        {Object.entries(report?.features || {}).map(([col, data]) => (
+                          data.type === "numerical" && <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                      
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                         <span style={{ fontSize: "13px" }}>Shift %:</span>
+                         <input 
+                           type="number" 
+                           value={simShift} 
+                           onChange={e => setSimShift(e.target.value)}
+                           style={{
+                             background: "#0f172a", border: `1px solid ${BORDER}`, color: "#f8fafc",
+                             padding: "8px 12px", borderRadius: "4px", outline: "none", fontSize: "12px", width: "80px", fontFamily: FONT_MONO
+                           }}
+                         />
+                      </div>
+                      
+                      <button
+                        onClick={runSimulation}
+                        disabled={!simCol || simLoading}
+                        style={{
+                          background: "#064e3b", border: "1px solid #10b981", color: "#10b981",
+                          padding: "8px 24px", borderRadius: "4px", cursor: (!simCol || simLoading) ? "default" : "pointer",
+                          fontSize: "12px", fontFamily: FONT, letterSpacing: "0.05em", opacity: (!simCol || simLoading) ? 0.5 : 1
+                        }}
+                      >
+                        {simLoading ? "SIMULATING..." : "RUN SIMULATION"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Live System Log */}
+        <div style={{ ...panelStyle, background: "#020617", padding: "12px 16px" }}>
+            <div style={labelStyle}>Live System Log</div>
+            <div style={{ 
+                height: "120px", 
+                overflowY: "auto", 
+                fontFamily: FONT_MONO, 
+                fontSize: "10px", 
+                color: "#4ade80", 
+                lineHeight: 1.6 
+            }}>
+                {history.slice(0, 10).map((h, i) => (
+                    <div key={i}>
+                        <span style={{ color: "#334155" }}>[{new Date(h.created_at).toLocaleTimeString()}]</span> 
+                        <span style={{ color: "#10b981", marginLeft: "10px" }}>EVENT_INGESTED</span>
+                        <span style={{ color: "#94a3b8", marginLeft: "10px" }}>report={h.id} severity={h.overall_severity} drifted={h.drifted_features?.length}</span>
+                    </div>
+                ))}
+                <div><span style={{ color: "#334155" }}>[{new Date().toLocaleTimeString()}]</span> <span style={{ color: "#eab308", marginLeft: "10px" }}>AWAITING_TELEMETRY</span> ... system heartbeat ok</div>
+            </div>
+        </div>
       </div>
 
-      {/* Feature detail modal */}
       <FeatureModal
         feature={selectedFeat}
         data={selectedData}
         onClose={() => { setSelectedFeat(null); setSelectedData(null); }}
       />
-      </div>
     </div>
   );
 }
